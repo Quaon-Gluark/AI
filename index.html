@@ -1,100 +1,94 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>Pen Recognition</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-<style>
-  body {
-    font-family: Arial, sans-serif;
-    background: #f4f4f4;
-    text-align: center;
-    margin: 0;
-    padding: 20px;
-  }
-  video {
-    border: 2px solid #333;
-    border-radius: 12px;
-    width: 90vw;
-    max-width: 480px;
-    height: auto;
-    margin-top: 20px;
-  }
-  #result {
-    margin-top: 20px;
-    font-size: 1.5em;
-    font-weight: bold;
-    color: #333;
-    min-height: 1.5em;
-  }
-  #switchCam {
-    margin-top: 15px;
-    padding: 10px 20px;
-    font-size: 1em;
-    border: none;
-    border-radius: 8px;
-    background-color: #007BFF;
-    color: white;
-    cursor: pointer;
-  }
-  #switchCam:active {
-    background-color: #0056b3;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <title>Pen Detector AI</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background: #f4f4f4;
+      margin: 0;
+      padding: 20px;
+    }
+    video {
+      border: 2px solid #333;
+      border-radius: 12px;
+      width: 320px;
+      height: 240px;
+      margin-top: 20px;
+      background: black;
+    }
+    #result {
+      margin-top: 20px;
+      font-size: 1.5em;
+      font-weight: bold;
+      color: #333;
+      min-height: 1.8em;
+    }
+    button {
+      margin-top: 15px;
+      padding: 10px 20px;
+      font-size: 1em;
+      cursor: pointer;
+      border-radius: 8px;
+      border: 1px solid #333;
+      background: white;
+      transition: background-color 0.3s;
+    }
+    button:hover {
+      background-color: #ddd;
+    }
+  </style>
 </head>
 <body>
-  <h1>Pen Recognition</h1>
-  <video id="webcam" autoplay playsinline muted></video>
-  <br />
-  <button id="switchCam">Switch Camera</button>
+  <h1>Live Pen Recognition</h1>
+  <video id="webcam" autoplay playsinline muted></video><br />
+  <button id="toggleCameraBtn">Toggle Camera</button>
   <div id="result">Loading model...</div>
 
+  <!-- Load TensorFlow.js -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
 
   <script>
+    const classNames = ["Pen", "Nothing"];
+    const modelURL = "model/model.json"; // Change this if your model path differs
     const video = document.getElementById("webcam");
     const resultDiv = document.getElementById("result");
-    const switchCamButton = document.getElementById("switchCam");
+    const toggleBtn = document.getElementById("toggleCameraBtn");
 
-    const classNames = ["Pen", "Nothing"];
-    const modelURL = "model/model.json";
-    const inputSize = 226;
     let model;
-    let usingBackCamera = true;
-    let stream;
-    let predictionLoopId = null;
+    let currentStream = null;
+    let useFrontCamera = false;
+    const inputSize = 224;
+    let isPredicting = false;
 
-    async function getCameraStream() {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        stream = null;
+    async function setupCamera() {
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
       }
 
       const constraints = {
+        audio: false,
         video: {
-          facingMode: usingBackCamera ? { exact: "environment" } : "user"
+          facingMode: useFrontCamera ? "user" : { exact: "environment" }
         }
       };
 
       try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (err) {
-        // fallback if exact fails
-        console.warn("Exact facingMode failed, trying ideal:", err);
-        const fallbackConstraints = {
-          video: {
-            facingMode: usingBackCamera ? "environment" : "user"
-          }
-        };
-        stream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (e) {
+        // fallback to user camera if environment not available
+        console.warn("Back camera not found, switching to front camera.");
+        constraints.video.facingMode = "user";
+        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
       }
 
-      video.srcObject = stream;
+      video.srcObject = currentStream;
 
-      await new Promise((resolve) => {
+      return new Promise((resolve) => {
         video.onloadedmetadata = () => {
-          video.play();
-          resolve();
+          resolve(video);
         };
       });
     }
@@ -104,42 +98,6 @@
       resultDiv.innerText = "Model loaded!";
     }
 
-    async function predictLoop() {
-      if (predictionLoopId !== null) {
-        cancelAnimationFrame(predictionLoopId);
-      }
-
-      async function frame() {
-        if (video.readyState === 4 && model) {
-          tf.engine().startScope();
-
-          try {
-            const tensor = tf.browser.fromPixels(video)
-              .resizeBilinear([inputSize, inputSize])
-              .toFloat()
-              .div(255)
-              .expandDims(0);
-
-            const prediction = await model.predict(tensor).data();
-            displayPrediction(Array.from(prediction));
-          } catch (e) {
-            console.error("Prediction error:", e);
-            resultDiv.innerText = "Prediction error";
-          }
-
-          tf.engine().endScope();
-        } else {
-          // Show minimal waiting message only if no prediction shown
-          if (resultDiv.innerText === "" || resultDiv.innerText.startsWith("Prediction:") === false) {
-            resultDiv.innerText = "Waiting for video/model...";
-          }
-        }
-        predictionLoopId = requestAnimationFrame(frame);
-      }
-
-      predictionLoopId = requestAnimationFrame(frame);
-    }
-
     function displayPrediction(predictions) {
       const maxIndex = predictions.indexOf(Math.max(...predictions));
       const label = classNames[maxIndex];
@@ -147,27 +105,55 @@
       resultDiv.innerText = `Prediction: ${label} (${confidence}%)`;
     }
 
-    switchCamButton.addEventListener("click", async () => {
-      usingBackCamera = !usingBackCamera;
+    async function predictLoop() {
+      if (!model || !video.videoWidth || !video.videoHeight) {
+        requestAnimationFrame(predictLoop);
+        return;
+      }
+
+      if (isPredicting) {
+        // Skip this frame if still predicting last one
+        requestAnimationFrame(predictLoop);
+        return;
+      }
+
+      isPredicting = true;
 
       try {
-        await getCameraStream();
-        predictLoop();
+        const tensor = tf.tidy(() => {
+          return tf.browser.fromPixels(video)
+            .resizeBilinear([inputSize, inputSize])
+            .toFloat()
+            .div(tf.scalar(255))
+            .expandDims(0);
+        });
+
+        const prediction = await model.predict(tensor);
+        const predictionData = await prediction.data();
+
+        displayPrediction(Array.from(predictionData));
+
+        tensor.dispose();
+        prediction.dispose();
       } catch (e) {
-        console.error("Error switching camera:", e);
-        resultDiv.innerText = `Error switching camera: ${e.message}`;
+        console.error("Prediction error:", e);
+        resultDiv.innerText = "Prediction error: " + e.message;
       }
+
+      isPredicting = false;
+      requestAnimationFrame(predictLoop);
+    }
+
+    toggleBtn.addEventListener("click", async () => {
+      useFrontCamera = !useFrontCamera;
+      resultDiv.innerText = ""; // Clear result to avoid showing stale text
+      await setupCamera();
     });
 
     (async () => {
-      try {
-        await getCameraStream();
-        await loadModel();
-        predictLoop();
-      } catch (e) {
-        console.error("Initialization error:", e);
-        resultDiv.innerText = `Error: ${e.message}`;
-      }
+      await setupCamera();
+      await loadModel();
+      predictLoop();
     })();
   </script>
 </body>
