@@ -26,11 +26,26 @@
       font-weight: bold;
       color: #333;
     }
+    #switchCam {
+      margin-top: 15px;
+      padding: 10px 20px;
+      font-size: 1em;
+      border: none;
+      border-radius: 8px;
+      background-color: #007BFF;
+      color: white;
+      cursor: pointer;
+    }
+    #switchCam:active {
+      background-color: #0056b3;
+    }
   </style>
 </head>
 <body>
   <h1>Pen Recognition</h1>
   <video id="webcam" autoplay playsinline muted></video>
+  <br>
+  <button id="switchCam">Switch Camera</button>
   <div id="result">Loading model...</div>
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
@@ -38,33 +53,35 @@
   <script>
     const video = document.getElementById("webcam");
     const resultDiv = document.getElementById("result");
+    const switchCamButton = document.getElementById("switchCam");
+
     const classNames = ["Pen", "Nothing"];
     const modelURL = "model/model.json";
-    const inputSize = 96; // Small input for speed
+    const inputSize = 96;
     let model;
+    let usingBackCamera = true;
+    let stream;
+    let predictionLoopRunning = false;
 
-    async function getBackCameraStream() {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const backCam = devices.find(d => d.kind === "videoinput" && d.label.toLowerCase().includes("back"));
+    async function getCameraStream() {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
 
       const constraints = {
-        video: backCam
-          ? { deviceId: { exact: backCam.deviceId } }
-          : { facingMode: { ideal: "environment" } } // Fallback
+        video: usingBackCamera
+          ? { facingMode: { exact: "environment" } }
+          : { facingMode: "user" }
       };
 
-      return navigator.mediaDevices.getUserMedia(constraints);
-    }
-
-    async function setupCamera() {
       try {
-        const stream = await getBackCameraStream();
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
         video.srcObject = stream;
         return new Promise(resolve => {
-          video.onloadedmetadata = () => resolve(video);
+          video.onloadedmetadata = () => resolve();
         });
       } catch (err) {
-        resultDiv.innerText = "Camera error: " + err.message;
+        resultDiv.innerText = `Camera error: ${err.message}`;
         throw err;
       }
     }
@@ -82,26 +99,38 @@
     }
 
     async function predictLoop() {
-      if (!model || !video || video.readyState !== 4) return;
+      if (predictionLoopRunning || !model) return;
+      predictionLoopRunning = true;
 
-      tf.engine().startScope();
+      async function loop() {
+        tf.engine().startScope();
 
-      const tensor = tf.browser.fromPixels(video)
-        .resizeBilinear([inputSize, inputSize])
-        .toFloat()
-        .div(255)
-        .expandDims(0);
+        if (video.readyState === 4) {
+          const tensor = tf.browser.fromPixels(video)
+            .resizeBilinear([inputSize, inputSize])
+            .toFloat()
+            .div(255)
+            .expandDims(0);
 
-      const prediction = await model.predict(tensor).data();
-      displayPrediction(Array.from(prediction));
+          const prediction = await model.predict(tensor).data();
+          displayPrediction(Array.from(prediction));
+        }
 
-      tf.engine().endScope();
+        tf.engine().endScope();
+        setTimeout(loop, 300); // Limit frame rate
+      }
 
-      setTimeout(predictLoop, 300); // Low frequency for performance
+      loop();
     }
 
+    switchCamButton.addEventListener("click", async () => {
+      usingBackCamera = !usingBackCamera;
+      resultDiv.innerText = `Switching to ${usingBackCamera ? "Back" : "Front"} Camera...`;
+      await getCameraStream();
+    });
+
     (async () => {
-      await setupCamera();
+      await getCameraStream();
       await loadModel();
       predictLoop();
     })();
