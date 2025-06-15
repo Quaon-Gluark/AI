@@ -2,19 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Live Pen Recognition</title>
+  <title>Pen Detector AI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     body {
       font-family: Arial, sans-serif;
-      text-align: center;
       background: #f4f4f4;
+      text-align: center;
       margin: 0;
       padding: 20px;
     }
     video {
       border: 2px solid #333;
       border-radius: 12px;
-      width: 90vw;
+      width: 90%;
       max-width: 480px;
       height: auto;
       margin-top: 20px;
@@ -29,7 +30,7 @@
 </head>
 <body>
   <h1>Live Pen Recognition</h1>
-  <video id="webcam" autoplay playsinline></video>
+  <video id="webcam" autoplay playsinline muted></video>
   <div id="result">Loading model...</div>
 
   <!-- Load TensorFlow.js -->
@@ -38,25 +39,36 @@
   <script>
     const classNames = ["Pen", "Nothing"];
     const modelURL = "model/model.json";
-    const video = document.getElementById("webcam");
     const resultDiv = document.getElementById("result");
+    const video = document.getElementById("webcam");
+
+    const isMobile = /Mobi|Android|iPhone/i.test(navigator.userAgent);
+    const inputSize = isMobile ? 96 : 224;
     let model;
 
     async function setupCamera() {
+      const constraints = {
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          facingMode: { exact: "environment" } // Try back camera
+        }
+      };
+
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { exact: "environment" } }
-        });
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
         video.srcObject = stream;
+        return new Promise(resolve => {
+          video.onloadedmetadata = () => resolve();
+        });
       } catch (err) {
-        console.warn("Back camera not available, using front camera instead.");
+        // fallback to front camera if back camera fails
         const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
         video.srcObject = fallbackStream;
+        return new Promise(resolve => {
+          video.onloadedmetadata = () => resolve();
+        });
       }
-
-      return new Promise((resolve) => {
-        video.onloadedmetadata = () => resolve(video);
-      });
     }
 
     async function loadModel() {
@@ -73,17 +85,19 @@
 
     async function predict() {
       tf.engine().startScope();
+
       const tensor = tf.browser.fromPixels(video)
-        .resizeNearestNeighbor([128, 128])
+        .resizeNearestNeighbor([inputSize, inputSize])
         .expandDims(0)
         .toFloat()
         .div(tf.scalar(255));
 
       const predictions = await model.predict(tensor).data();
       displayPrediction(Array.from(predictions));
+
       tf.engine().endScope();
 
-      requestAnimationFrame(predict);
+      setTimeout(predict, 200); // throttle to reduce CPU on mobile
     }
 
     (async () => {
