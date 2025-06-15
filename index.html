@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Pen Detector AI</title>
+<title>Pen Recognition</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
 <style>
   body {
@@ -25,6 +25,7 @@
     font-size: 1.5em;
     font-weight: bold;
     color: #333;
+    min-height: 1.5em;
   }
   #switchCam {
     margin-top: 15px;
@@ -78,7 +79,7 @@
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
       } catch (err) {
-        // fallback if exact fails (some devices don’t support it)
+        // fallback if exact fails
         console.warn("Exact facingMode failed, trying ideal:", err);
         const fallbackConstraints = {
           video: {
@@ -90,7 +91,6 @@
 
       video.srcObject = stream;
 
-      // Wait for video to be ready to play
       await new Promise((resolve) => {
         video.onloadedmetadata = () => {
           video.play();
@@ -129,7 +129,10 @@
 
           tf.engine().endScope();
         } else {
-          resultDiv.innerText = "Waiting for video/model...";
+          // Show minimal waiting message only if no prediction shown
+          if (resultDiv.innerText === "" || resultDiv.innerText.startsWith("Prediction:") === false) {
+            resultDiv.innerText = "Waiting for video/model...";
+          }
         }
         predictionLoopId = requestAnimationFrame(frame);
       }
@@ -145,8 +148,6 @@
     }
 
     switchCamButton.addEventListener("click", async () => {
-      resultDiv.innerText = `Switching to ${usingBackCamera ? "Front" : "Back"} Camera...`;
-
       usingBackCamera = !usingBackCamera;
 
       try {
