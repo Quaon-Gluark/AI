@@ -60,14 +60,19 @@
     }
 
     async function predict() {
-      const tensor = tf.browser.fromPixels(video)
-        .resizeNearestNeighbor([224, 224])
-        .expandDims(0)
-        .toFloat()
-        .div(tf.scalar(255));
+      tf.tidy(() => {
+        const tensor = tf.browser.fromPixels(video)
+          .resizeNearestNeighbor([224, 224])
+          .expandDims(0)
+          .toFloat()
+          .div(tf.scalar(255));
 
-      const predictions = await model.predict(tensor).data();
-      displayPrediction(Array.from(predictions));
+        const prediction = model.predict(tensor);
+        prediction.data().then(data => {
+          displayPrediction(Array.from(data));
+        });
+      });
+
       requestAnimationFrame(predict);
     }
 
@@ -76,6 +81,11 @@
       await loadModel();
       predict();
     })();
+
+    // Cleanup when closing
+    window.addEventListener('beforeunload', () => {
+      tf.disposeVariables();
+    });
   </script>
 </body>
 </html>
