@@ -61,7 +61,7 @@
     let model;
     let usingBackCamera = true;
     let stream;
-    let predictionLoopRunning = false;
+    let stopPrediction = false;
 
     async function getCameraStream() {
       if (stream) {
@@ -69,14 +69,15 @@
       }
 
       const constraints = {
-        video: usingBackCamera
-          ? { facingMode: { exact: "environment" } }
-          : { facingMode: "user" }
+        video: {
+          facingMode: usingBackCamera ? { exact: "environment" } : "user"
+        }
       };
 
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
         video.srcObject = stream;
+
         return new Promise(resolve => {
           video.onloadedmetadata = () => resolve();
         });
@@ -91,21 +92,13 @@
       resultDiv.innerText = "Model loaded!";
     }
 
-    function displayPrediction(predictions) {
-      const maxIndex = predictions.indexOf(Math.max(...predictions));
-      const label = classNames[maxIndex];
-      const confidence = (predictions[maxIndex] * 100).toFixed(1);
-      resultDiv.innerText = `Prediction: ${label} (${confidence}%)`;
-    }
-
     async function predictLoop() {
-      if (predictionLoopRunning || !model) return;
-      predictionLoopRunning = true;
+      stopPrediction = false;
 
-      async function loop() {
+      while (!stopPrediction) {
         tf.engine().startScope();
 
-        if (video.readyState === 4) {
+        if (video.readyState === 4 && model) {
           const tensor = tf.browser.fromPixels(video)
             .resizeBilinear([inputSize, inputSize])
             .toFloat()
@@ -117,16 +110,25 @@
         }
 
         tf.engine().endScope();
-        setTimeout(loop, 300); // Limit frame rate
+        await new Promise(resolve => setTimeout(resolve, 300)); // 300ms delay
       }
+    }
 
-      loop();
+    function displayPrediction(predictions) {
+      const maxIndex = predictions.indexOf(Math.max(...predictions));
+      const label = classNames[maxIndex];
+      const confidence = (predictions[maxIndex] * 100).toFixed(1);
+      resultDiv.innerText = `Prediction: ${label} (${confidence}%)`;
     }
 
     switchCamButton.addEventListener("click", async () => {
+      stopPrediction = true;
+      resultDiv.innerText = `Switching to ${usingBackCamera ? "Front" : "Back"} Camera...`;
+
       usingBackCamera = !usingBackCamera;
-      resultDiv.innerText = `Switching to ${usingBackCamera ? "Back" : "Front"} Camera...`;
+
       await getCameraStream();
+      predictLoop(); // Restart prediction loop
     });
 
     (async () => {
