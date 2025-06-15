@@ -29,7 +29,7 @@
   </style>
 </head>
 <body>
-  <h1>Live Pen Recognition</h1>
+  <h1>Pen Recognition</h1>
   <video id="webcam" autoplay playsinline muted></video>
   <div id="result">Loading model...</div>
 
@@ -40,30 +40,33 @@
     const resultDiv = document.getElementById("result");
     const classNames = ["Pen", "Nothing"];
     const modelURL = "model/model.json";
+    const inputSize = 96; // Small input for speed
     let model;
 
-    const inputSize = /Mobi|Android|iPhone/i.test(navigator.userAgent) ? 96 : 224;
+    async function getBackCameraStream() {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const backCam = devices.find(d => d.kind === "videoinput" && d.label.toLowerCase().includes("back"));
+
+      const constraints = {
+        video: backCam
+          ? { deviceId: { exact: backCam.deviceId } }
+          : { facingMode: { ideal: "environment" } } // Fallback
+      };
+
+      return navigator.mediaDevices.getUserMedia(constraints);
+    }
 
     async function setupCamera() {
-      let stream = null;
-
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { exact: "environment" } // Try back camera
-          }
+        const stream = await getBackCameraStream();
+        video.srcObject = stream;
+        return new Promise(resolve => {
+          video.onloadedmetadata = () => resolve(video);
         });
       } catch (err) {
-        // Fallback: default camera
-        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        resultDiv.innerText = "Camera error: " + err.message;
+        throw err;
       }
-
-      video.srcObject = stream;
-      return new Promise(resolve => {
-        video.onloadedmetadata = () => {
-          resolve(video);
-        };
-      });
     }
 
     async function loadModel() {
@@ -79,17 +82,14 @@
     }
 
     async function predictLoop() {
-      if (!model || !video || video.readyState !== 4) {
-        setTimeout(predictLoop, 100);
-        return;
-      }
+      if (!model || !video || video.readyState !== 4) return;
 
       tf.engine().startScope();
 
       const tensor = tf.browser.fromPixels(video)
-        .resizeNearestNeighbor([inputSize, inputSize])
+        .resizeBilinear([inputSize, inputSize])
         .toFloat()
-        .div(255.0)
+        .div(255)
         .expandDims(0);
 
       const prediction = await model.predict(tensor).data();
@@ -97,8 +97,7 @@
 
       tf.engine().endScope();
 
-      // Reduce CPU usage
-      setTimeout(predictLoop, 250);
+      setTimeout(predictLoop, 300); // Low frequency for performance
     }
 
     (async () => {
