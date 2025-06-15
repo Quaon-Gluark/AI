@@ -2,18 +2,21 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Pen Detector AI</title>
+  <title>Live Pen Recognition</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       text-align: center;
       background: #f4f4f4;
+      margin: 0;
+      padding: 20px;
     }
     video {
       border: 2px solid #333;
       border-radius: 12px;
-      width: 480px;
-      height: 360px;
+      width: 90vw;
+      max-width: 480px;
+      height: auto;
       margin-top: 20px;
     }
     #result {
@@ -40,8 +43,17 @@
     let model;
 
     async function setupCamera() {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      video.srcObject = stream;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: "environment" } }
+        });
+        video.srcObject = stream;
+      } catch (err) {
+        console.warn("Back camera not available, using front camera instead.");
+        const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = fallbackStream;
+      }
+
       return new Promise((resolve) => {
         video.onloadedmetadata = () => resolve(video);
       });
@@ -60,18 +72,16 @@
     }
 
     async function predict() {
-      tf.tidy(() => {
-        const tensor = tf.browser.fromPixels(video)
-          .resizeNearestNeighbor([224, 224])
-          .expandDims(0)
-          .toFloat()
-          .div(tf.scalar(255));
+      tf.engine().startScope();
+      const tensor = tf.browser.fromPixels(video)
+        .resizeNearestNeighbor([224, 224])
+        .expandDims(0)
+        .toFloat()
+        .div(tf.scalar(255));
 
-        const prediction = model.predict(tensor);
-        prediction.data().then(data => {
-          displayPrediction(Array.from(data));
-        });
-      });
+      const predictions = await model.predict(tensor).data();
+      displayPrediction(Array.from(predictions));
+      tf.engine().endScope();
 
       requestAnimationFrame(predict);
     }
@@ -81,11 +91,6 @@
       await loadModel();
       predict();
     })();
-
-    // Cleanup when closing
-    window.addEventListener('beforeunload', () => {
-      tf.disposeVariables();
-    });
   </script>
 </body>
 </html>
