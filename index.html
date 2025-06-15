@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Pen Detector AI</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background: #f4f4f4;
+    }
+    video {
+      border: 2px solid #333;
+      border-radius: 12px;
+      width: 480px;
+      height: 360px;
+      margin-top: 20px;
+    }
+    #result {
+      margin-top: 20px;
+      font-size: 1.5em;
+      font-weight: bold;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <h1>Live Pen Recognition</h1>
+  <video id="webcam" autoplay playsinline></video>
+  <div id="result">Loading model...</div>
+
+  <!-- Load TensorFlow.js -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
+
+  <script>
+    const classNames = ["Pen", "Nothing"];
+    const modelURL = "model/model.json";
+    const video = document.getElementById("webcam");
+    const resultDiv = document.getElementById("result");
+    let model;
+
+    async function setupCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+      return new Promise((resolve) => {
+        video.onloadedmetadata = () => resolve(video);
+      });
+    }
+
+    async function loadModel() {
+      model = await tf.loadLayersModel(modelURL);
+      resultDiv.innerText = "Model loaded!";
+    }
+
+    function displayPrediction(predictions) {
+      const maxIndex = predictions.indexOf(Math.max(...predictions));
+      const label = classNames[maxIndex];
+      const confidence = (predictions[maxIndex] * 100).toFixed(1);
+      resultDiv.innerText = `Prediction: ${label} (${confidence}%)`;
+    }
+
+    async function predict() {
+      const tensor = tf.browser.fromPixels(video)
+        .resizeNearestNeighbor([224, 224])
+        .expandDims(0)
+        .toFloat()
+        .div(tf.scalar(255));
+
+      const predictions = await model.predict(tensor).data();
+      displayPrediction(Array.from(predictions));
+      requestAnimationFrame(predict);
+    }
+
+    (async () => {
+      await setupCamera();
+      await loadModel();
+      predict();
+    })();
+  </script>
+</body>
+</html>
