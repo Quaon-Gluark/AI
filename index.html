@@ -19,6 +19,9 @@
       margin-top: 20px;
       background: black;
     }
+    video.mirrored {
+      transform: scaleX(-1);
+    }
     #result {
       margin-top: 20px;
       font-size: 1.5em;
@@ -78,13 +81,13 @@
       try {
         currentStream = await navigator.mediaDevices.getUserMedia(constraints);
       } catch (e) {
-        // fallback to user camera if environment not available
         console.warn("Back camera not found, switching to front camera.");
         constraints.video.facingMode = "user";
         currentStream = await navigator.mediaDevices.getUserMedia(constraints);
       }
 
       video.srcObject = currentStream;
+      video.classList.toggle("mirrored", useFrontCamera); // Flip only for front camera
 
       return new Promise((resolve) => {
         video.onloadedmetadata = () => {
@@ -112,7 +115,6 @@
       }
 
       if (isPredicting) {
-        // Skip this frame if still predicting last one
         requestAnimationFrame(predictLoop);
         return;
       }
@@ -146,7 +148,7 @@
 
     toggleBtn.addEventListener("click", async () => {
       useFrontCamera = !useFrontCamera;
-      resultDiv.innerText = ""; // Clear result to avoid showing stale text
+      resultDiv.innerText = ""; // Clear result
       await setupCamera();
     });
 
