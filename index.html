@@ -2,7 +2,7 @@
 <html lang="en">
 <head> 
   <meta charset="UTF-8" />
-  <title>Object Detection </title>
+  <title>Object Detection</title>
   <style> 
     body { 
       font-family: Arial, sans-serif;
@@ -14,8 +14,8 @@
     video {
       border: 2px solid #333;
       border-radius: 12px;
-      width: 320px;
-      height: 240px;
+      width: 640px;
+      height: 480px;
       margin-top: 20px;
       background: black;
     }
@@ -50,12 +50,11 @@
   <button id="toggleCameraBtn">Toggle Camera</button>
   <div id="result">Loading model...</div>
 
-  <!-- Load TensorFlow.js -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
 
   <script>
     const classNames = ["Pen", "Nothing"];
-    const modelURL = "model/model.json"; // Change this if your model path differs
+    const modelURL = "model/model.json";
     const video = document.getElementById("webcam");
     const resultDiv = document.getElementById("result");
     const toggleBtn = document.getElementById("toggleCameraBtn");
@@ -87,7 +86,7 @@
       }
 
       video.srcObject = currentStream;
-      video.classList.toggle("mirrored", useFrontCamera); // Flip only for front camera
+      video.classList.toggle("mirrored", useFrontCamera);
 
       return new Promise((resolve) => {
         video.onloadedmetadata = () => {
@@ -148,7 +147,7 @@
 
     toggleBtn.addEventListener("click", async () => {
       useFrontCamera = !useFrontCamera;
-      resultDiv.innerText = ""; // Clear result
+      resultDiv.innerText = "";
       await setupCamera();
     });
 
