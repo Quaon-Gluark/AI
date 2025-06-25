@@ -1,1 +1,1 @@
-{"tfjsVersion":"1.7.4","tmVersion":"2.4.10","packageVersion":"0.8.4-alpha2","packageName":"@teachablemachine/image","timeStamp":"2025-06-15T21:21:42.749Z","userMetadata":{},"modelName":"tm-my-image-model","labels":["Pen","Nothing"],"imageSize":224}
+{"tfjsVersion":"1.7.4","tmVersion":"2.4.10","packageVersion":"0.8.4-alpha2","packageName":"@teachablemachine/image","timeStamp":"2025-06-25T11:20:59.720Z","userMetadata":{},"modelName":"tm-my-image-model","labels":["micro:bit","Raspberry Pi","EV3","Bottle","Arduino","Pen","Nothing"],"imageSize":224}
