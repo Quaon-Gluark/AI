@@ -5,7 +5,6 @@
 <title>Live Object Detection</title>
 
 <style>
-
 body{
   font-family:Arial,sans-serif;
   text-align:center;
@@ -14,7 +13,6 @@ body{
   padding:20px;
 }
 
-/* container for video + canvas */
 #videoContainer{
   position:relative;
   width:640px;
@@ -39,7 +37,7 @@ canvas{
   left:0;
   width:640px;
   height:480px;
-  pointer-events:none; /* allows clicks to pass through */
+  pointer-events:none;
 }
 
 video.mirrored, canvas.mirrored{
@@ -65,7 +63,6 @@ button{
 button:hover{
   background:#ddd;
 }
-
 </style>
 </head>
 
@@ -80,14 +77,12 @@ button:hover{
 
 <br>
 <button id="toggleCameraBtn">Toggle Camera</button>
-
 <div id="result">Loading model...</div>
 
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 
 <script>
-
 const video = document.getElementById("webcam")
 const canvas = document.getElementById("overlay")
 const ctx = canvas.getContext("2d")
@@ -98,100 +93,89 @@ let model
 let currentStream=null
 let useFrontCamera=false
 
-
 async function setupCamera(){
+  if(currentStream){
+    currentStream.getTracks().forEach(t=>t.stop())
+  }
 
- if(currentStream){
-   currentStream.getTracks().forEach(t=>t.stop())
- }
+  const constraints={
+    audio:false,
+    video:{facingMode:useFrontCamera?"user":{exact:"environment"}}
+  }
 
- const constraints={
-   audio:false,
-   video:{facingMode:useFrontCamera?"user":{exact:"environment"}}
- }
+  try{
+    currentStream=await navigator.mediaDevices.getUserMedia(constraints)
+  }catch{
+    constraints.video.facingMode="user"
+    currentStream=await navigator.mediaDevices.getUserMedia(constraints)
+  }
 
- try{
-   currentStream=await navigator.mediaDevices.getUserMedia(constraints)
- }catch{
-   constraints.video.facingMode="user"
-   currentStream=await navigator.mediaDevices.getUserMedia(constraints)
- }
+  video.srcObject=currentStream
+  video.classList.toggle("mirrored",useFrontCamera)
+  canvas.classList.toggle("mirrored",useFrontCamera)
 
- video.srcObject=currentStream
-
- video.classList.toggle("mirrored",useFrontCamera)
- canvas.classList.toggle("mirrored",useFrontCamera)
-
- return new Promise(resolve=>{
-   video.onloadedmetadata=()=>resolve(video)
- })
-
+  return new Promise(resolve=>{
+    video.onloadedmetadata=()=>resolve(video)
+  })
 }
-
 
 async function loadModel(){
-
- model=await cocoSsd.load()
-
- resultDiv.innerText="Model loaded!"
-
+  model=await cocoSsd.load()
+  resultDiv.innerText="Model loaded!"
 }
-
 
 async function detect(){
+  if(!model || !video.videoWidth){
+    requestAnimationFrame(detect)
+    return
+  }
 
- if(!model || !video.videoWidth){
-   requestAnimationFrame(detect)
-   return
- }
+  canvas.width=video.videoWidth
+  canvas.height=video.videoHeight
 
- canvas.width=video.videoWidth
- canvas.height=video.videoHeight
+  const predictions=await model.detect(video)
+  ctx.clearRect(0,0,canvas.width,canvas.height)
 
- const predictions=await model.detect(video)
+  // array to store detections for bottom text
+  const detectedObjects = []
 
- ctx.clearRect(0,0,canvas.width,canvas.height)
+  predictions.forEach(pred=>{
+    const [x,y,w,h]=pred.bbox
 
- predictions.forEach(pred=>{
+    // bounding boxes
+    ctx.strokeStyle="#00FFFF"
+    ctx.lineWidth=2
+    ctx.strokeRect(x,y,w,h)
 
-   const [x,y,w,h]=pred.bbox
+    // labels on video - always draw normally (not flipped)
+    ctx.save()
+    if(useFrontCamera) ctx.scale(-1,1) // flip canvas horizontally temporarily
+    const labelX = useFrontCamera ? -x - w : x
+    ctx.font="16px Arial"
+    ctx.fillStyle="#00FFFF"
+    ctx.fillText(`${pred.class} ${(pred.score*100).toFixed(1)}%`, labelX, y>10?y-5:10)
+    ctx.restore()
 
-   ctx.strokeStyle="#00FFFF"
-   ctx.lineWidth=2
-   ctx.strokeRect(x,y,w,h)
+    // push to detected objects list
+    detectedObjects.push(`${pred.class} ${(pred.score*100).toFixed(1)}%`)
+  })
 
-   ctx.font="16px Arial"
-   ctx.fillStyle="#00FFFF"
+  // show detected objects at the bottom
+  resultDiv.innerText = detectedObjects.length>0 ? "Detected: " + detectedObjects.join(", ") : "No objects detected"
 
-   ctx.fillText(
-     `${pred.class} ${(pred.score*100).toFixed(1)}%`,
-     x,
-     y>10?y-5:10
-   )
-
- })
-
- requestAnimationFrame(detect)
-
+  requestAnimationFrame(detect)
 }
-
 
 toggleBtn.onclick=async()=>{
-
- useFrontCamera=!useFrontCamera
- await setupCamera()
-
+  useFrontCamera=!useFrontCamera
+  await setupCamera()
 }
 
-
 (async()=>{
-
- await setupCamera()
- await loadModel()
- detect()
-
+  await setupCamera()
+  await loadModel()
+  detect()
 })()
-
 </script>
 
 </body>
