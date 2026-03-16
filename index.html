@@ -3,152 +3,195 @@
 <head>
 <meta charset="UTF-8">
 <title>Live Object Detection</title>
+
 <style>
-body {
-  font-family: Arial, sans-serif;
-  text-align: center;
-  background: #f4f4f4;
-  margin: 0;
-  padding: 20px;
+
+body{
+  font-family:Arial,sans-serif;
+  text-align:center;
+  background:#f4f4f4;
+  margin:0;
+  padding:20px;
 }
-video, canvas {
-  border: 2px solid #333;
-  border-radius: 12px;
-  width: 640px;
-  height: 480px;
-  margin-top: 20px;
-  background: black;
+
+/* container for video + canvas */
+#videoContainer{
+  position:relative;
+  width:640px;
+  height:480px;
+  margin:auto;
 }
-video.mirrored, canvas.mirrored {
-  transform: scaleX(-1);
+
+video{
+  position:absolute;
+  top:0;
+  left:0;
+  width:640px;
+  height:480px;
+  border:2px solid #333;
+  border-radius:12px;
+  background:black;
 }
-#result {
-  margin-top: 20px;
-  font-size: 1.2em;
-  font-weight: bold;
-  color: #333;
-  min-height: 1.8em;
+
+canvas{
+  position:absolute;
+  top:0;
+  left:0;
+  width:640px;
+  height:480px;
+  pointer-events:none; /* allows clicks to pass through */
 }
-button {
-  margin-top: 15px;
-  padding: 10px 20px;
-  font-size: 1em;
-  cursor: pointer;
-  border-radius: 8px;
-  border: 1px solid #333;
-  background: white;
+
+video.mirrored, canvas.mirrored{
+  transform:scaleX(-1);
 }
-button:hover {
-  background-color: #ddd;
+
+#result{
+  margin-top:20px;
+  font-size:1.2em;
+  font-weight:bold;
 }
+
+button{
+  margin-top:15px;
+  padding:10px 20px;
+  font-size:1em;
+  border-radius:8px;
+  border:1px solid #333;
+  background:white;
+  cursor:pointer;
+}
+
+button:hover{
+  background:#ddd;
+}
+
 </style>
 </head>
+
 <body>
 
 <h1>Live Object Detection</h1>
 
-<video id="webcam" autoplay playsinline muted></video>
-<canvas id="overlay"></canvas><br>
+<div id="videoContainer">
+  <video id="webcam" autoplay playsinline muted></video>
+  <canvas id="overlay"></canvas>
+</div>
 
+<br>
 <button id="toggleCameraBtn">Toggle Camera</button>
+
 <div id="result">Loading model...</div>
 
-<!-- TensorFlow.js -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
-<!-- COCO-SSD -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 
 <script>
-const video = document.getElementById("webcam");
-const canvas = document.getElementById("overlay");
-const ctx = canvas.getContext("2d");
-const resultDiv = document.getElementById("result");
-const toggleBtn = document.getElementById("toggleCameraBtn");
 
-let model;
-let currentStream = null;
-let useFrontCamera = false;
+const video = document.getElementById("webcam")
+const canvas = document.getElementById("overlay")
+const ctx = canvas.getContext("2d")
+const resultDiv = document.getElementById("result")
+const toggleBtn = document.getElementById("toggleCameraBtn")
 
-/* CAMERA SETUP */
-async function setupCamera() {
-  if (currentStream) currentStream.getTracks().forEach(track => track.stop());
+let model
+let currentStream=null
+let useFrontCamera=false
 
-  const constraints = {
-    audio: false,
-    video: { facingMode: useFrontCamera ? "user" : { exact: "environment" } }
-  };
 
-  try {
-    currentStream = await navigator.mediaDevices.getUserMedia(constraints);
-  } catch {
-    constraints.video.facingMode = "user";
-    currentStream = await navigator.mediaDevices.getUserMedia(constraints);
-  }
+async function setupCamera(){
 
-  video.srcObject = currentStream;
-  video.classList.toggle("mirrored", useFrontCamera);
-  canvas.classList.toggle("mirrored", useFrontCamera);
+ if(currentStream){
+   currentStream.getTracks().forEach(t=>t.stop())
+ }
 
-  return new Promise(resolve => {
-    video.onloadedmetadata = () => resolve(video);
-  });
+ const constraints={
+   audio:false,
+   video:{facingMode:useFrontCamera?"user":{exact:"environment"}}
+ }
+
+ try{
+   currentStream=await navigator.mediaDevices.getUserMedia(constraints)
+ }catch{
+   constraints.video.facingMode="user"
+   currentStream=await navigator.mediaDevices.getUserMedia(constraints)
+ }
+
+ video.srcObject=currentStream
+
+ video.classList.toggle("mirrored",useFrontCamera)
+ canvas.classList.toggle("mirrored",useFrontCamera)
+
+ return new Promise(resolve=>{
+   video.onloadedmetadata=()=>resolve(video)
+ })
+
 }
 
-/* LOAD COCO-SSD MODEL */
-async function loadModel() {
-  model = await cocoSsd.load();
-  resultDiv.innerText = "Model loaded! Starting detection...";
+
+async function loadModel(){
+
+ model=await cocoSsd.load()
+
+ resultDiv.innerText="Model loaded!"
+
 }
 
-/* PREDICTION LOOP */
-async function predictLoop() {
-  if (!model || !video.videoWidth) {
-    requestAnimationFrame(predictLoop);
-    return;
-  }
 
-  const predictions = await model.detect(video);
+async function detect(){
 
-  // Resize canvas to video
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+ if(!model || !video.videoWidth){
+   requestAnimationFrame(detect)
+   return
+ }
 
-  // Clear previous frame
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+ canvas.width=video.videoWidth
+ canvas.height=video.videoHeight
 
-  // Draw predictions
-  predictions.forEach(pred => {
-    const [x, y, width, height] = pred.bbox;
-    ctx.strokeStyle = "#00FFFF";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x, y, width, height);
-    ctx.font = "16px Arial";
-    ctx.fillStyle = "#00FFFF";
-    ctx.fillText(`${pred.class} (${(pred.score*100).toFixed(1)}%)`, x, y > 10 ? y - 5 : 10);
-  });
+ const predictions=await model.detect(video)
 
-  // Display detected objects in text
-  if (predictions.length > 0) {
-    resultDiv.innerText = `Detected: ${predictions.map(p => p.class).join(", ")}`;
-  } else {
-    resultDiv.innerText = "No objects detected";
-  }
+ ctx.clearRect(0,0,canvas.width,canvas.height)
 
-  requestAnimationFrame(predictLoop);
+ predictions.forEach(pred=>{
+
+   const [x,y,w,h]=pred.bbox
+
+   ctx.strokeStyle="#00FFFF"
+   ctx.lineWidth=2
+   ctx.strokeRect(x,y,w,h)
+
+   ctx.font="16px Arial"
+   ctx.fillStyle="#00FFFF"
+
+   ctx.fillText(
+     `${pred.class} ${(pred.score*100).toFixed(1)}%`,
+     x,
+     y>10?y-5:10
+   )
+
+ })
+
+ requestAnimationFrame(detect)
+
 }
 
-/* CAMERA TOGGLE */
-toggleBtn.onclick = async () => {
-  useFrontCamera = !useFrontCamera;
-  await setupCamera();
-};
 
-/* START */
-(async () => {
-  await setupCamera();
-  await loadModel();
-  predictLoop();
-})();
+toggleBtn.onclick=async()=>{
+
+ useFrontCamera=!useFrontCamera
+ await setupCamera()
+
+}
+
+
+(async()=>{
+
+ await setupCamera()
+ await loadModel()
+ detect()
+
+})()
+
 </script>
 
 </body>
