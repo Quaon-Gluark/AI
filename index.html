@@ -1,9 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
+<meta charset="UTF-8">
 <title>Live Object Detection</title>
-
 <style>
 body {
   font-family: Arial, sans-serif;
@@ -44,8 +43,8 @@ button:hover {
 }
 </style>
 </head>
-
 <body>
+
 <h1>Live Object Detection</h1>
 
 <video id="webcam" autoplay playsinline muted></video>
@@ -56,7 +55,7 @@ button:hover {
 
 <!-- TensorFlow.js -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
-<!-- COCO-SSD model -->
+<!-- COCO-SSD -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 
 <script>
@@ -72,9 +71,7 @@ let useFrontCamera = false;
 
 /* CAMERA SETUP */
 async function setupCamera() {
-  if (currentStream) {
-    currentStream.getTracks().forEach(track => track.stop());
-  }
+  if (currentStream) currentStream.getTracks().forEach(track => track.stop());
 
   const constraints = {
     audio: false,
@@ -83,8 +80,7 @@ async function setupCamera() {
 
   try {
     currentStream = await navigator.mediaDevices.getUserMedia(constraints);
-  } catch (e) {
-    console.warn("Back camera not found, switching to front camera.");
+  } catch {
     constraints.video.facingMode = "user";
     currentStream = await navigator.mediaDevices.getUserMedia(constraints);
   }
@@ -113,11 +109,14 @@ async function predictLoop() {
 
   const predictions = await model.detect(video);
 
-  // Clear previous drawings
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // Resize canvas to video
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
 
+  // Clear previous frame
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw predictions
   predictions.forEach(pred => {
     const [x, y, width, height] = pred.bbox;
     ctx.strokeStyle = "#00FFFF";
@@ -125,9 +124,10 @@ async function predictLoop() {
     ctx.strokeRect(x, y, width, height);
     ctx.font = "16px Arial";
     ctx.fillStyle = "#00FFFF";
-    ctx.fillText(`${pred.class} (${(pred.score * 100).toFixed(1)}%)`, x, y > 10 ? y - 5 : 10);
+    ctx.fillText(`${pred.class} (${(pred.score*100).toFixed(1)}%)`, x, y > 10 ? y - 5 : 10);
   });
 
+  // Display detected objects in text
   if (predictions.length > 0) {
     resultDiv.innerText = `Detected: ${predictions.map(p => p.class).join(", ")}`;
   } else {
@@ -150,129 +150,6 @@ toggleBtn.onclick = async () => {
   predictLoop();
 })();
 </script>
-</body>
-</html>      border-radius: 8px;
-      border: 1px solid #333;
-      background: white;
-      transition: background-color 0.3s;
-    }
-    button:hover {
-      background-color: #ddd;
-    }
-  </style>
-</head>
-<body>
-  <h1>Live Object Recognition</h1>
-  <video id="webcam" autoplay playsinline muted></video><br />
-  <button id="toggleCameraBtn">Toggle Camera</button>
-  <div id="result">Loading model...</div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0"></script>
-
-  <script>
-    const classNames = ["micro:bit", "Raspberry Pi","EV3","Bottle","Arduino","Pen","Nothing","Phone","Watch","Martian Rock"];
-    const modelURL = "model/model.json";
-    const video = document.getElementById("webcam");
-    const resultDiv = document.getElementById("result");
-    const toggleBtn = document.getElementById("toggleCameraBtn");
-
-    let model;
-    let currentStream = null;
-    let useFrontCamera = false;
-    const inputSize = 224;
-    let isPredicting = false;
-
-    async function setupCamera() {
-      if (currentStream) {
-        currentStream.getTracks().forEach(track => track.stop());
-      }
-
-      const constraints = {
-        audio: false,
-        video: {
-          facingMode: useFrontCamera ? "user" : { exact: "environment" }
-        }
-      };
-
-      try {
-        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (e) {
-        console.warn("Back camera not found, switching to front camera.");
-        constraints.video.facingMode = "user";
-        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
-      }
-
-      video.srcObject = currentStream;
-      video.classList.toggle("mirrored", useFrontCamera);
-
-      return new Promise((resolve) => {
-        video.onloadedmetadata = () => {
-          resolve(video);
-        };
-      });
-    }
-
-    async function loadModel() {
-      model = await tf.loadLayersModel(modelURL);
-      resultDiv.innerText = "Model loaded!";
-    }
-
-    function displayPrediction(predictions) {
-      const maxIndex = predictions.indexOf(Math.max(...predictions));
-      const label = classNames[maxIndex];
-      const confidence = (predictions[maxIndex] * 100).toFixed(1);
-      resultDiv.innerText = `Prediction: ${label} (${confidence}%)`;
-    }
-
-    async function predictLoop() {
-      if (!model || !video.videoWidth || !video.videoHeight) {
-        requestAnimationFrame(predictLoop);
-        return;
-      }
-
-      if (isPredicting) {
-        requestAnimationFrame(predictLoop);
-        return;
-      }
-
-      isPredicting = true;
-
-      try {
-        const tensor = tf.tidy(() => {
-          return tf.browser.fromPixels(video)
-            .resizeBilinear([inputSize, inputSize])
-            .toFloat()
-            .div(tf.scalar(255))
-            .expandDims(0);
-        });
-
-        const prediction = await model.predict(tensor);
-        const predictionData = await prediction.data();
-
-        displayPrediction(Array.from(predictionData));
-
-        tensor.dispose();
-        prediction.dispose();
-      } catch (e) {
-        console.error("Prediction error:", e);
-        resultDiv.innerText = "Prediction error: " + e.message;
-      }
-
-      isPredicting = false;
-      requestAnimationFrame(predictLoop);
-    }
-
-    toggleBtn.addEventListener("click", async () => {
-      useFrontCamera = !useFrontCamera;
-      resultDiv.innerText = "";
-      await setupCamera();
-    });
-
-    (async () => {
-      await setupCamera();
-      await loadModel();
-      predictLoop();
-    })();
-  </script>
 </body>
 </html>
