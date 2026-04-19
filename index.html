@@ -38,6 +38,11 @@ canvas{
   pointer-events:none;
 }
 
+/* flip front camera back to normal */
+video.mirrored, canvas.mirrored{
+  transform: scaleX(-1);
+}
+
 #result{
   margin-top:20px;
   font-size:1.2em;
@@ -67,8 +72,7 @@ button:hover{
   border-radius:10px;
   border:1px solid #ccc;
   max-width:700px;
-  margin-left:auto;
-  margin-right:auto;
+  margin:auto;
 }
 
 /* search */
@@ -106,7 +110,7 @@ button:hover{
   transition:0.2s;
 }
 
-/* highlight animation */
+/* highlight */
 @keyframes pulse{
   0%{transform:scale(1);}
   50%{transform:scale(1.08);}
@@ -116,9 +120,8 @@ button:hover{
 .object-item.active{
   background:#00ffff;
   font-weight:bold;
-  animation:pulse 0.6s ease;
+  animation:pulse 0.5s ease;
 }
-
 </style>
 </head>
 
@@ -152,16 +155,11 @@ button:hover{
 const CATEGORIES = {
   "People":["person"],
   "Vehicles":["bicycle","car","motorcycle","airplane","bus","train","truck","boat"],
-  "Outdoor":["traffic light","fire hydrant","stop sign","bench"],
   "Animals":["bird","cat","dog","horse","sheep","cow","elephant","bear","zebra","giraffe"],
-  "Accessories":["backpack","umbrella","handbag","tie","suitcase"],
-  "Sports":["frisbee","skis","snowboard","sports ball","kite","baseball bat","baseball glove","skateboard","surfboard","tennis racket"],
-  "Kitchen":["bottle","wine glass","cup","fork","knife","spoon","bowl"],
-  "Food":["banana","apple","sandwich","orange","broccoli","carrot","hot dog","pizza","donut","cake"],
-  "Furniture":["chair","couch","bed","dining table","toilet"],
-  "Electronics":["tv","laptop","mouse","remote","keyboard","cell phone"],
-  "Appliances":["microwave","oven","toaster","sink","refrigerator"],
-  "Misc":["book","clock","vase","scissors","teddy bear","hair drier","toothbrush"]
+  "Food":["banana","apple","sandwich","orange","pizza","cake"],
+  "Furniture":["chair","couch","bed","dining table"],
+  "Electronics":["tv","laptop","mouse","keyboard","cell phone"],
+  "Misc":["book","clock","vase","scissors","teddy bear"]
 }
 
 // build UI
@@ -213,7 +211,7 @@ dropdownBtn.onclick=()=>{
   dropdownBtn.innerText=show?"See what this model can detect ▼":"See what this model can detect ▲"
 }
 
-// search filter
+// search
 searchBox.oninput=()=>{
   const q=searchBox.value.toLowerCase()
   allItems.forEach(el=>{
@@ -221,7 +219,7 @@ searchBox.oninput=()=>{
   })
 }
 
-// camera setup (NO MIRROR NOW)
+// camera setup
 async function setupCamera(){
   if(currentStream){
     currentStream.getTracks().forEach(t=>t.stop())
@@ -240,6 +238,10 @@ async function setupCamera(){
   }
 
   video.srcObject=currentStream
+
+  // ✅ FIX: flip front camera back to normal
+  video.classList.toggle("mirrored", useFrontCamera)
+  canvas.classList.toggle("mirrored", useFrontCamera)
 
   return new Promise(resolve=>{
     video.onloadedmetadata=()=>resolve(video)
@@ -263,7 +265,7 @@ async function detect(){
   const predictions=await model.detect(video)
   ctx.clearRect(0,0,canvas.width,canvas.height)
 
-  const detectedObjects=[]
+  const detected=[]
   const activeSet=new Set()
 
   predictions.forEach(pred=>{
@@ -273,34 +275,25 @@ async function detect(){
     ctx.lineWidth=2
     ctx.strokeRect(x,y,w,h)
 
-    ctx.font="16px Arial"
     ctx.fillStyle="#00FFFF"
-    ctx.fillText(`${pred.class} ${(pred.score*100).toFixed(1)}%`, x, y>10?y-5:10)
+    ctx.fillText(pred.class, x, y>10?y-5:10)
 
-    detectedObjects.push(pred.class)
+    detected.push(pred.class)
     activeSet.add(pred.class)
   })
 
   // highlight
   allItems.forEach(el=>{
-    if(activeSet.has(el.dataset.name)){
-      el.classList.add("active")
-    }else{
-      el.classList.remove("active")
-    }
+    el.classList.toggle("active", activeSet.has(el.dataset.name))
   })
 
   // count
   const counts={}
-  detectedObjects.forEach(obj=>{
-    counts[obj]=(counts[obj]||0)+1
-  })
+  detected.forEach(o=>counts[o]=(counts[o]||0)+1)
 
-  const text=Object.entries(counts)
+  resultDiv.innerText = Object.entries(counts)
     .map(([k,v])=>`${k} (${v})`)
-    .join(", ")
-
-  resultDiv.innerText=text || "No objects detected"
+    .join(", ") || "No objects detected"
 
   requestAnimationFrame(detect)
 }
